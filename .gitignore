@@ -6,3 +6,4 @@ tmp.txt
 *.releaseBackup
 release.properties
 .attach_pid*
+*.csv

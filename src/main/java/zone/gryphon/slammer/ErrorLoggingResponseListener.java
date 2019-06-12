@@ -13,11 +13,13 @@ import java.util.function.LongConsumer;
 @Slf4j
 public class ErrorLoggingResponseListener extends BufferingResponseListener {
 
+    private long id;
     private final LongConsumer consumer;
 
     private final long start;
 
-    public ErrorLoggingResponseListener(LongConsumer consumer) {
+    public ErrorLoggingResponseListener(long id, LongConsumer consumer) {
+        this.id = id;
         this.consumer = consumer;
         this.start = System.nanoTime();
     }
@@ -29,16 +31,19 @@ public class ErrorLoggingResponseListener extends BufferingResponseListener {
         try {
             if (result.isFailed()) {
                 Throwable failure = result.getFailure();
-                log.error("Failed to call {}", result.getRequest().getURI(), failure);
+//                log.error("request {} failed. URL: '{}': {}: {}", id, result.getRequest().getURI(), failure.getClass().getSimpleName(), failure.getLocalizedMessage(), failure);
+                log.error("request {} failed. URL: '{}'", id, result.getRequest().getURI(), failure);
+                System.exit(1);
                 return;
+
             }
 
 
             if (result.getResponse().getStatus() / 100 == 2) {
-                log.trace("Successfully called URL {}", result.getRequest().getURI());
+                log.trace("request {} completed. Successfully called URL {}", id, result.getRequest().getURI());
             } else {
-                log.error("Status {} calling {}, response: {}",
-                        result.getResponse().getStatus(), result.getRequest().getURI(), process(getContentAsString()));
+                log.error("Request {} failed. Status {} calling {}, response: {}",
+                        id, result.getResponse().getStatus(), result.getRequest().getURI(), process(getContentAsString()));
             }
 
         } finally {

@@ -21,14 +21,13 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
-import java.util.Timer;
-import java.util.TimerTask;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
 /**
  * @author galen
@@ -38,6 +37,10 @@ public class UrlSlammer {
     private static final Logger log = LoggerFactory.getLogger(UrlSlammer.class);
 
     private static final int cores = Runtime.getRuntime().availableProcessors();
+
+    private static final double NANOSECONDS_IN_A_SECOND = 1_000_000_000.0;
+
+    private static final double NANOSECONDS_IN_A_MILLISECOND = 1_000_000.0;
 
     public static void main(String... args) {
         new UrlSlammer(args).run();
@@ -87,6 +90,7 @@ public class UrlSlammer {
 
     @Parameter(
             names = {"--max-concurrent-requests"},
+            validateValueWith = ShortValidator.class,
             description = "" +
                     "The maximum number of outstanding requests to have open at any point in time. " +
                     "Having too many requests open simultaneously can cause port exhaustion, leading to failed requests."
@@ -134,7 +138,7 @@ public class UrlSlammer {
         }
 
         client = new HttpClient(new SslContextFactory());
-        executorService = Executors.newFixedThreadPool(cores * 2);
+        executorService = Executors.newFixedThreadPool(cores);
     }
 
     private void run() {
@@ -152,24 +156,26 @@ public class UrlSlammer {
 
             client.setMaxRequestsQueuedPerDestination(Short.MAX_VALUE);
 
+            client.setResponseBufferSize(8192);
+            client.setRequestBufferSize(8192);
+
             client.start();
         } catch (Exception e) {
             throw new RuntimeException("Failed to start HTTP client", e);
         }
 
         try {
-            log.info("About to start slamming URLs");
             Statistics statistics = doSlam();
 
-            double durationInSeconds = statistics.getTestDuration().toNanos() / 1000000000.0;
-            double averageResponseTimeMs = statistics.getAverageResponseTime().toNanos() / 1000000.0;
-
-            String time = String.format("%.3f", durationInSeconds);
-            String rate = String.format("%.3f", statistics.getRequests() / durationInSeconds);
-            String responseTime = String.format("%.3f", averageResponseTimeMs);
+            double durationInSeconds = statistics.getTestDuration().toNanos() / NANOSECONDS_IN_A_SECOND;
+            double averageResponseTimeMs = statistics.getAverageResponseTime().toNanos() / NANOSECONDS_IN_A_MILLISECOND;
+            double rate = statistics.getRequests() / durationInSeconds;
 
             log.info("Done slamming URLs. Hit {} URLs in {} seconds; avg {} requests/sec, average response time {} ms",
-                    statistics.getRequests(), time, rate, responseTime);
+                    statistics.getRequests(),
+                    format(durationInSeconds),
+                    format(rate),
+                    format(averageResponseTimeMs));
         } finally {
             try {
                 client.stop();
@@ -179,7 +185,11 @@ public class UrlSlammer {
         }
     }
 
-    private Iterable<Request> calculateUrls() {
+    private static String format(double d) {
+        return String.format("%.3f", d);
+    }
+
+    private Iterable<Request> calculateRequests() {
         Map<String, String> params = new HashMap<>();
 
         Matcher matcher = pattern.matcher(url);
@@ -235,57 +245,61 @@ public class UrlSlammer {
         }
     }
 
-    private Request applyReadTimeout(Request request) {
-        return request;
+    private Statistics doSlam() {
+        Meter meter = new Meter();
+        Meter started = new Meter();
 
+        try (Metrics ignored = new Metrics(meter, started)) {
+            for (Request request : calculateRequests()) {
+
+                // ensure we aren't breaching the desired request rate
+                while (meter.rate() > rate) {
+
+                    // the expected test duration based on the desired rate and number of requests
+                    long expectedDurationInNanoseconds = (long) ((meter.count() / rate) * 1_000_000_000);
+
+                    // how long the test has been running
+                    long durationInNanoSeconds = meter.duration(NANOSECONDS);
+
+                    long deltaInNanoseconds = expectedDurationInNanoseconds - durationInNanoSeconds;
+
+                    if (deltaInNanoseconds > 0) {
+                        long deltaInMilliseconds = (long) Math.ceil(deltaInNanoseconds / 1_0000_000.0);
+
+                        sleep(deltaInMilliseconds);
+                    }
+                }
+
+                while (requestsInflight.get() > maxActiveRequests) {
+                    // TODO intelligently notify when requests drop below threshold using object.wait()
+                    // TODO and object.notify() instead of blindly using Thread.sleep()
+                    sleep(10);
+                }
+
+
+                requestsInflight.incrementAndGet();
+                meter.mark();
+
+                final long requestId = meter.count();
+
+                request.onRequestBegin(i -> {
+                    started.mark();
+                })
+
+                        .send(new ErrorLoggingResponseListener(requestId, this::requestCompleted));
+            }
+
+            long duration = meter.duration(NANOSECONDS);
+            log.info("Done queueing requests (queued {} requests)", meter.count());
+
+            awaitCompletionOfAllRequests();
+
+            executorService.shutdown();
+            return new Statistics(meter.count(), Duration.ofNanos(duration), Duration.ofNanos(responseTimeNanoSum.get() / meter.count()));
+        }
     }
 
-    private Statistics doSlam() {
-        long start = System.nanoTime();
-
-        Meter meter = new Meter();
-
-        Timer timer = new Timer();
-
-        timer.schedule(new TimerTask() {
-            @Override
-            public void run() {
-                log.info("Rate: {} requests/second, requests: {}", String.format("%.2f", meter.rate()), meter.count());
-            }
-        }, 1000, 1000);
-
-        for (Request request : calculateUrls()) {
-
-            // ensure we aren't breaching the desired request rate
-            while (meter.rate() > rate) {
-
-                // the expected test duration based on the desired rate and number of requests
-                long expectedDurationInNanoseconds = (long) ((meter.count() / rate) * 1_000_000_000);
-
-                // how long the test has been running
-                long durationInNanoSeconds = System.nanoTime() - start;
-
-                long deltaInNanoseconds = expectedDurationInNanoseconds - durationInNanoSeconds;
-
-                if (deltaInNanoseconds > 0) {
-                    long deltaInMilliseconds = (long) Math.ceil(deltaInNanoseconds / 1_0000_000.0);
-
-                    sleep(deltaInMilliseconds);
-                }
-            }
-
-            while (requestsInflight.get() > maxActiveRequests) {
-                sleep(10);
-            }
-
-
-            requestsInflight.incrementAndGet();
-            meter.mark();
-            applyReadTimeout(request).send(new ErrorLoggingResponseListener(this::requestCompleted));
-        }
-
-        long complete = System.nanoTime();
-        log.info("Done issuing requests (issued {} requests)", meter.count());
+    private void awaitCompletionOfAllRequests() {
 
         // block until all the requests have completed
         long inFlight;
@@ -294,16 +308,13 @@ public class UrlSlammer {
             log.info("Waiting for {} requests to complete", inFlight);
             synchronized (mutex) {
                 try {
-                    mutex.wait(10000);
+                    mutex.wait(Duration.ofSeconds(1).toMillis());
                 } catch (InterruptedException e) {
-                    log.debug("InterruptedException waiting for mutex to complete", e);
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException("Interrupted waiting for requests to complete", e);
                 }
             }
         }
-
-        timer.cancel();
-        executorService.shutdown();
-        return new Statistics(meter.count(), Duration.ofNanos(complete - start), Duration.ofNanos(responseTimeNanoSum.get() / meter.count()));
     }
 
     private void requestCompleted(long duration) {

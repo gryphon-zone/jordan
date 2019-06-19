@@ -1,4 +1,4 @@
-package zone.gryphon.slammer;
+package zone.gryphon.jordan;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;

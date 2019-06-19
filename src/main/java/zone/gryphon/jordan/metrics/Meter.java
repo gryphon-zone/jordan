@@ -1,4 +1,4 @@
-package zone.gryphon.slammer;
+package zone.gryphon.jordan;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -27,6 +27,7 @@ public class Meter {
      * @return The rate
      */
     public double rate() {
+
         if (requests.get() == 0) {
             return 0;
         }

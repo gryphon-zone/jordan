@@ -1,4 +1,4 @@
-package zone.gryphon.slammer;
+package zone.gryphon.jordan;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
@@ -10,6 +10,8 @@ import org.eclipse.jetty.client.api.Request;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import zone.gryphon.jordan.input.RequiredFileConverter;
+import zone.gryphon.jordan.input.ShortValidator;
 
 import java.io.BufferedReader;
 import java.io.File;

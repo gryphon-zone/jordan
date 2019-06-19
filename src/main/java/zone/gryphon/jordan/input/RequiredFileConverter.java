@@ -1,4 +1,4 @@
-package zone.gryphon.slammer;
+package zone.gryphon.jordan;
 
 import com.beust.jcommander.IStringConverter;
 

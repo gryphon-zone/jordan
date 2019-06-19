@@ -8,6 +8,7 @@
         <version>0.7</version>
     </parent>
 
+    <groupId>zone.gryphon.jordan</groupId>
     <artifactId>jordan</artifactId>
     <version>1.0-SNAPSHOT</version>
 

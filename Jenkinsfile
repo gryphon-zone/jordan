@@ -8,14 +8,17 @@ pipeline {
     }
 
     options {
-        buildDiscarder logRotator(daysToKeepStr: '30', numToKeepStr: '10')
+        timestamps()
+        ansiColor('xterm')
+        buildDiscarder logRotator(daysToKeepStr: '30', numToKeepStr: '100')
         disableConcurrentBuilds()
         disableResume()
         timeout(activity: true, time: 20)
-        timestamps()
+        durabilityHint 'PERFORMANCE_OPTIMIZED'
     }
 
     stages {
+
         stage('Log Maven and Java versions'){
             steps {
                 sh 'mvn --version'

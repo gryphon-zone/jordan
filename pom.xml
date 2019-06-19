@@ -12,6 +12,18 @@
     <artifactId>jordan</artifactId>
     <version>1.0-SNAPSHOT</version>
 
+    <name>${project.groupId}:${project.artifactId}</name>
+    <description>HTTP load generating application</description>
+
+    <url>https://github.com/gryphon-zone/jordan</url>
+
+    <scm>
+        <connection>scm:git:git@github.com:gryphon-zone/jordan.git</connection>
+        <developerConnection>scm:git:git@github.com:gryphon-zone/jordan.git</developerConnection>
+        <tag>HEAD</tag>
+        <url>https://github.com/gryphon-zone/jordan/tree/master</url>
+    </scm>
+
     <dependencyManagement>
         <dependencies>
 

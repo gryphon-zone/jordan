@@ -1,4 +1,4 @@
-package zone.gryphon.jordan;
+package zone.gryphon.jordan.metrics;
 
 import lombok.RequiredArgsConstructor;
 import lombok.Value;

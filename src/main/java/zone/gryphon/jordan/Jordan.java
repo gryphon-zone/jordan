@@ -2,16 +2,18 @@ package zone.gryphon.jordan;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.Request;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import zone.gryphon.jordan.input.RequiredFileConverter;
 import zone.gryphon.jordan.input.ShortValidator;
+import zone.gryphon.jordan.metrics.Meter;
+import zone.gryphon.jordan.metrics.Metrics;
+import zone.gryphon.jordan.metrics.Statistics;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -34,9 +36,8 @@ import static java.util.concurrent.TimeUnit.NANOSECONDS;
 /**
  * @author galen
  */
-public class UrlSlammer {
-
-    private static final Logger log = LoggerFactory.getLogger(UrlSlammer.class);
+@Slf4j
+public class Jordan {
 
     private static final int cores = Runtime.getRuntime().availableProcessors();
 
@@ -45,7 +46,7 @@ public class UrlSlammer {
     private static final double NANOSECONDS_IN_A_MILLISECOND = 1_000_000.0;
 
     public static void main(String... args) {
-        new UrlSlammer(args).run();
+        new Jordan(args).run();
     }
 
     @Parameter(
@@ -118,7 +119,7 @@ public class UrlSlammer {
 
     private final ExecutorService executorService;
 
-    private UrlSlammer(String... args) {
+    private Jordan(String... args) {
 
         try {
             JCommander.newBuilder()

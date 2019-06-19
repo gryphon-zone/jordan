@@ -1,4 +1,4 @@
-package zone.gryphon.jordan;
+package zone.gryphon.jordan.metrics;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -24,6 +24,7 @@ public class Meter {
 
     /**
      * Return the current rate, in requests/second
+     *
      * @return The rate
      */
     public double rate() {

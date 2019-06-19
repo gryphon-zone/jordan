@@ -1,4 +1,4 @@
-package zone.gryphon.jordan;
+package zone.gryphon.jordan.metrics;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;

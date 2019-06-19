@@ -1,9 +1,10 @@
-package zone.gryphon.slammer;
+package zone.gryphon.jordan;
 
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.jetty.client.api.Result;
 import org.eclipse.jetty.client.util.BufferingResponseListener;
 
+import java.net.URI;
 import java.util.function.LongConsumer;
 
 /**
@@ -29,21 +30,19 @@ public class ErrorLoggingResponseListener extends BufferingResponseListener {
         long duration = System.nanoTime() - start;
 
         try {
-            if (result.isFailed()) {
-                Throwable failure = result.getFailure();
-//                log.error("request {} failed. URL: '{}': {}: {}", id, result.getRequest().getURI(), failure.getClass().getSimpleName(), failure.getLocalizedMessage(), failure);
-                log.error("request {} failed. URL: '{}'", id, result.getRequest().getURI(), failure);
-                System.exit(1);
-                return;
 
+            URI uri = result.getRequest().getURI();
+
+            if (result.isFailed()) {
+                log.error("request {} failed. URL: '{}'", id, uri, result.getFailure());
+                return;
             }
 
-
             if (result.getResponse().getStatus() / 100 == 2) {
-                log.trace("request {} completed. Successfully called URL {}", id, result.getRequest().getURI());
+                log.trace("request {} completed. Successfully called URL '{}'", id, uri);
             } else {
-                log.error("Request {} failed. Status {} calling {}, response: {}",
-                        id, result.getResponse().getStatus(), result.getRequest().getURI(), process(getContentAsString()));
+                log.error("Request {} failed. Status {} calling '{}', response: {}",
+                        id, result.getResponse().getStatus(), uri, process(getContentAsString()));
             }
 
         } finally {

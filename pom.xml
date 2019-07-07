@@ -21,7 +21,7 @@
     <parent>
         <groupId>zone.gryphon</groupId>
         <artifactId>base-pom</artifactId>
-        <version>0.10.40-b019c3e</version>
+        <version>0.10.47-b117536</version>
     </parent>
 
     <groupId>zone.gryphon.jordan</groupId>

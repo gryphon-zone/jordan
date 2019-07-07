@@ -47,7 +47,7 @@
             <dependency>
                 <groupId>zone.gryphon</groupId>
                 <artifactId>base-bom</artifactId>
-                <version>0.2</version>
+                <version>0.3.12-41fa8ed</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

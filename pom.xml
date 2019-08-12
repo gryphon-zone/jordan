@@ -19,7 +19,7 @@
     <parent>
         <groupId>zone.gryphon</groupId>
         <artifactId>base-pom</artifactId>
-        <version>0.11.35-a225641</version>
+        <version>0.11.41-5e4a1d7</version>
     </parent>
 
     <groupId>zone.gryphon.jordan</groupId>
@@ -38,6 +38,10 @@
         <url>https://github.com/gryphon-zone/jordan/tree/master</url>
     </scm>
 
+    <properties>
+        <jetty.version>9.4.19.v20190610</jetty.version>
+    </properties>
+
     <dependencyManagement>
         <dependencies>
 
@@ -45,7 +49,7 @@
             <dependency>
                 <groupId>zone.gryphon</groupId>
                 <artifactId>base-bom</artifactId>
-                <version>0.11.9-84ff5b5</version>
+                <version>${core-poms.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -56,23 +60,25 @@
                 <artifactId>jcommander</artifactId>
                 <version>1.72</version>
             </dependency>
+
             <dependency>
                 <groupId>org.apache.commons</groupId>
                 <artifactId>commons-csv</artifactId>
-                <version>1.5</version>
+                <version>1.7</version>
             </dependency>
 
             <dependency>
                 <groupId>org.eclipse.jetty</groupId>
                 <artifactId>jetty-client</artifactId>
-                <version>9.4.12.RC0</version>
+                <version>${jetty.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>org.eclipse.jetty</groupId>
                 <artifactId>jetty-util</artifactId>
-                <version>9.4.12.RC0</version>
+                <version>${jetty.version}</version>
             </dependency>
+
         </dependencies>
     </dependencyManagement>
 
@@ -163,10 +169,10 @@
                 <artifactId>maven-shade-plugin</artifactId>
                 <executions>
                     <execution>
-                        <phase>package</phase>
                         <goals>
                             <goal>shade</goal>
                         </goals>
+                        <phase>package</phase>
                         <configuration>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">

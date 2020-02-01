@@ -19,7 +19,6 @@ import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.Request;
@@ -36,15 +35,18 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
@@ -81,8 +83,8 @@ public class Jordan {
             names = "--url",
             description = "" +
                     "The URL to hit. " +
-                    "When --paramsFile is specified, the url can contain substitution parameters using the syntax {key}, e.g. " +
-                    "http://example.com/page/{pageNumber}"
+                    "When a parameter file is given, variable interpolation is supported using the syntax \"{key}\", " +
+                    "e.g. http://example.com/page/{pageNumber}"
     )
     private String url;
 
@@ -95,6 +97,16 @@ public class Jordan {
                     "The HTTP method to use when issuing requests"
     )
     private String httpMethod = "GET";
+
+    @Parameter(
+            names = {"-H", "--header"},
+            description = "" +
+                    "Headers to include on the request, in \"Name: value\" format. " +
+                    "When a parameter file is given, variable interpolation is supported using the syntax \"{key}\", " +
+                    "e.g. \"Authorization: {token}\""
+    )
+    private List<String> headers = new ArrayList<>();
+
 
     @Parameter(
             names = {"-r", "--rate"},
@@ -155,7 +167,7 @@ public class Jordan {
             System.exit(0);
         }
 
-        client = new HttpClient(new SslContextFactory());
+        client = new HttpClient(new SslContextFactory.Client());
         executorService = Executors.newFixedThreadPool(cores);
     }
 
@@ -210,57 +222,75 @@ public class Jordan {
     private Iterable<Request> calculateRequests() {
         Map<String, String> params = new HashMap<>();
 
-        Matcher matcher = pattern.matcher(url);
+        // find any usages of parameter substitution
+        Stream.concat(Stream.of(url), headers.stream()).forEach(string -> {
+            Matcher matcher = pattern.matcher(string);
 
-        while (matcher.find()) {
-            params.put(matcher.group(1), String.format("{%s}", matcher.group(1)));
+            while (matcher.find()) {
+                params.put(matcher.group(1), String.format("{%s}", matcher.group(1)));
+            }
+        });
+
+        if (!params.isEmpty() && paramsFile == null) {
+            log.error("Parameter file must be provided when parameter substitution is used");
+            System.exit(1);
         }
 
-        if (params.isEmpty()) {
-            // no params, and a single URL means we only have 1 request
-            return Collections.singleton(client.newRequest(url).method(httpMethod));
-        } else {
-            if (paramsFile == null) {
-                log.error("Parameter file must be provided when parameter substitution is used in URL or body");
-                System.exit(1);
-            }
+        final Iterator<CSVRecord> records;
 
+        if (params.isEmpty()) {
+            records = Collections.emptyIterator();
+        } else {
             try {
                 BufferedReader isr = new BufferedReader(new InputStreamReader(new FileInputStream(paramsFile)));
-
-                CSVParser csvParser = CSVFormat.RFC4180.withFirstRecordAsHeader().parse(isr);
-
-                return () -> new Iterator<Request>() {
-
-                    final Iterator<CSVRecord> wrapped = csvParser.iterator();
-
-                    @Override
-                    public boolean hasNext() {
-                        return wrapped.hasNext();
-                    }
-
-                    @Override
-                    public Request next() {
-                        CSVRecord record = wrapped.next();
-
-                        StringBuilder builder = new StringBuilder(url);
-
-                        params.forEach((name, substitution) -> {
-                            int startIndex;
-
-                            while ((startIndex = builder.indexOf(substitution)) >= 0) {
-                                builder.replace(startIndex, startIndex + substitution.length(), record.get(name));
-                            }
-                        });
-
-                        return client.newRequest(builder.toString())
-                                .method(httpMethod);
-                    }
-                };
+                records = CSVFormat.RFC4180.withFirstRecordAsHeader().parse(isr).iterator();
             } catch (IOException e) {
                 throw new RuntimeException("Failed to read in file " + paramsFile.getAbsolutePath(), e);
             }
         }
+
+        return () -> new Iterator<Request>() {
+
+            @Override
+            public boolean hasNext() {
+                return records.hasNext();
+            }
+
+            @Override
+            public Request next() {
+                CSVRecord record = records.next();
+
+                final Request request = client.newRequest(interpolate(url, params, record)).method(httpMethod);
+
+                for (String header : headers) {
+                    String interpolated = interpolate(header, params, record);
+
+                    int index = interpolated.indexOf(": ");
+
+                    if (index < 0) {
+                        throw new IllegalArgumentException(String.format("Invalid header \"%s\"", interpolated));
+                    }
+
+                    request.header(interpolated.substring(0, index), interpolated.substring(index + 2));
+                }
+
+                return request;
+            }
+        };
+    }
+
+    private String interpolate(String input, Map<String, String> parameters, CSVRecord record) {
+        StringBuilder builder = new StringBuilder(input);
+
+        parameters.forEach((name, substitution) -> {
+            int startIndex;
+
+            while ((startIndex = builder.indexOf(substitution)) >= 0) {
+                builder.replace(startIndex, startIndex + substitution.length(), record.get(name));
+            }
+        });
+
+        return builder.toString();
     }
 
     private Statistics doSlam() {
